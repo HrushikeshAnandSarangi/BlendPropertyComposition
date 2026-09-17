@@ -7,15 +7,29 @@ features, 80/20 train/val split (`random_state=42`).
 ## 1. Model comparison (held-out validation set)
 
 CatBoost, XGBoost, and LightGBM trained with matched hyperparameters (500 estimators, depth 6,
-learning rate 0.05), each wrapped in `MultiOutputRegressor` over the 10 `BlendProperty` targets.
+learning rate 0.05), each wrapped in `MultiOutputRegressor` over the 10 `BlendProperty` targets —
+alongside two naive references so the comparison is self-contained: **MeanBaseline** (predict the
+training mean for every row, `sklearn.dummy.DummyRegressor(strategy="mean")`) and a plain
+**LinearRegression**.
 
-| Model    | mean MAPE | mean MAE | mean RMSE |
-|----------|----------:|---------:|----------:|
-| **CatBoost** | 0.774 | **0.1063** | **0.1477** |
-| LightGBM | 2.293 | 0.1314 | 0.1764 |
-| XGBoost  | 1.900 | 0.1575 | 0.2096 |
+| Model                | mean MAPE | mean MAE | mean RMSE |
+|-----------------------|----------:|---------:|----------:|
+| **CatBoost**          | 0.774 | **0.1063** | **0.1477** |
+| LightGBM              | 2.293 | 0.1314 | 0.1764 |
+| LinearRegression      | 1.122 | 0.1356 | 0.1772 |
+| XGBoost               | 1.900 | 0.1575 | 0.2096 |
+| MeanBaseline (naive)  | 1.140 | 0.7999 | 0.9937 |
 
-**Winner: CatBoost — 16.3% lower RMSE than the runner-up (LightGBM).**
+**Winner: CatBoost**
+- **16.3% lower RMSE** than the runner-up among the real models (LightGBM, 0.1764).
+- **85.1% lower RMSE** than the naive mean-predictor baseline (0.9937) — this is the number that
+  says the model is actually learning the blending relationship, not just the ranking among model
+  families.
+
+Also notable: a **plain linear regression** (RMSE 0.1772) is nearly tied with LightGBM and clearly
+beats XGBoost here — most of the 461 engineered features (weighted-mixing terms especially) are
+close to linear in their relationship to the targets, so gradient boosting's edge over linear
+regression is real but modest (CatBoost specifically) rather than dramatic across the board.
 
 > Note on MAPE: `BlendProperty1-10` are standardized (roughly zero-centered) values, so a
 > handful of validation rows have true values very close to 0, which inflates percentage error

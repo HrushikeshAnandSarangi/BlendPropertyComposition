@@ -12,13 +12,30 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.dummy import DummyRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.multioutput import MultiOutputRegressor
 
+# Naive references included in every comparison so "model X wins" numbers are
+# anchored to "wins by how much over guessing the training mean / a straight
+# line", not just ranked against each other.
+BASELINE_MODEL_NAMES = ("MeanBaseline", "LinearRegression")
+
 
 def train_val_split(X, y, test_size: float = 0.2, random_state: int = 42):
     return train_test_split(X, y, test_size=test_size, random_state=random_state)
+
+
+def build_baseline_models() -> dict:
+    """Naive reference models: predict-the-training-mean, and plain linear
+    regression. Both support multi-output `y` natively (no MultiOutputRegressor
+    wrapper needed)."""
+    return {
+        "MeanBaseline": DummyRegressor(strategy="mean"),
+        "LinearRegression": LinearRegression(),
+    }
 
 
 def build_candidate_models(random_state: int = 42) -> dict[str, MultiOutputRegressor]:
@@ -58,13 +75,18 @@ def build_candidate_models(random_state: int = 42) -> dict[str, MultiOutputRegre
     }
 
 
-def compare_models(X_tr, y_tr, X_val, y_val, target_names=None, random_state: int = 42):
-    """Fit CatBoost, XGBoost, and LightGBM on the train split and score each
+def compare_models(X_tr, y_tr, X_val, y_val, target_names=None, random_state: int = 42, include_baselines: bool = True):
+    """Fit CatBoost, XGBoost, and LightGBM (plus, by default, a mean-predictor
+    and a plain linear regression baseline) on the train split and score each
     on the held-out val split.
+
+    The baselines make the comparison self-contained: "model X wins" is
+    anchored to how much it beats guessing the training mean / a straight
+    line, not just how the gradient boosters rank against each other.
 
     Returns ``(summary_df, per_target_df, fitted_models)``:
       - ``summary_df``: one row per model, mean MAPE/MAE/RMSE across targets,
-        sorted best (lowest MAPE) first.
+        sorted best (lowest RMSE) first.
       - ``per_target_df``: one row per (model, target) with the same metrics.
       - ``fitted_models``: dict of name -> fitted estimator, so the winner
         can be reused without retraining.
@@ -75,6 +97,8 @@ def compare_models(X_tr, y_tr, X_val, y_val, target_names=None, random_state: in
         )
 
     models = build_candidate_models(random_state=random_state)
+    if include_baselines:
+        models = {**build_baseline_models(), **models}
     fitted_models: dict[str, MultiOutputRegressor] = {}
     summary_rows = []
     per_target_rows = []
